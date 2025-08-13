@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Samu AI - পড়াশোনার সহায়ক</title>
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0; padding: 0; background: #f5f7fa; color: #222;
+    display: flex; flex-direction: column; min-height: 100vh;
+  }
+  header {
+    background: #2c3e50; color: #fff; padding: 1rem; text-align: center;
+    font-weight: bold; font-size: 1.4rem;
+  }
+  main {
+    flex: 1;
+    max-width: 600px;
+    margin: 1rem auto;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgb(0 0 0 / 0.1);
+    padding: 1rem 1.5rem;
+  }
+  textarea, input[type="file"] {
+    width: 100%;
+    padding: 0.8rem;
+    font-size: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    resize: vertical;
+    box-sizing: border-box;
+  }
+  button {
+    background: #2980b9;
+    border: none;
+    color: white;
+    padding: 0.8rem 1.2rem;
+    font-size: 1rem;
+    border-radius: 6px;
+    margin-top: 0.8rem;
+    cursor: pointer;
+    width: 100%;
+  }
+  button:disabled {
+    background: #999;
+    cursor: not-allowed;
+  }
+  #response {
+    margin-top: 1rem;
+    white-space: pre-wrap;
+    background: #ecf0f1;
+    padding: 1rem;
+    border-radius: 6px;
+    min-height: 120px;
+  }
+  .loader {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #2980b9;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto;
+  }
+  @keyframes spin {
+    0% { transform: rotate(0deg);}
+    100% { transform: rotate(360deg);}
+  }
+  label {
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+    display: block;
+  }
+  .info {
+    font-size: 0.85rem;
+    color: #555;
+    margin-bottom: 0.7rem;
+  }
+</style>
+</head>
+<body>
+<header>Samu AI - পড়াশোনার সহায়ক</header>
+<main>
+  <label for="questionInput">আপনার প্রশ্ন লিখুন:</label>
+  <textarea id="questionInput" rows="4" placeholder="এখানে আপনার প্রশ্ন টাইপ করুন..."></textarea>
+  
+  <label for="imageInput">অথবা ছবি আপলোড করুন (ডাউট নিয়ে):</label>
+  <input type="file" id="imageInput" accept="image/*" capture="environment" />
+  
+  <button id="askBtn">জিজ্ঞেস করুন</button>
+  
+  <div id="loader" style="display:none;" class="loader"></div>
+  
+  <div id="response" role="region" aria-live="polite"></div>
+  
+  <p class="info">*** ছবি থেকে টেক্সট পড়ার জন্য কিছু সময় লাগতে পারে। ***</p>
+</main>
+
+<!-- Tesseract.js CDN for OCR -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
+
+<script>
+  const questionInput = document.getElementById('questionInput');
+  const imageInput = document.getElementById('imageInput');
+  const askBtn = document.getElementById('askBtn');
+  const responseDiv = document.getElementById('response');
+  const loader = document.getElementById('loader');
+
+  // OpenAI API KEY - এখানে আপনার নিজের API KEY দিন:
+  const OPENAI_API_KEY = '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
+
+';
+
+  // ছবি থেকে টেক্সট পড়া ফাংশন
+  async function readImage(file) {
+    responseDiv.textContent = "ছবি থেকে টেক্সট পড়া হচ্ছে, একটু অপেক্ষা করুন...";
+    loader.style.display = 'block';
+    try {
+      const { data: { text } } = await Tesseract.recognize(file, 'ben+eng');
+      loader.style.display = 'none';
+      return text;
+    } catch (err) {
+      loader.style.display = 'none';
+      alert('ছবি থেকে টেক্সট পড়তে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
+      return '';
+    }
+  }
+
+  // OpenAI থেকে উত্তর আনা
+  async function fetchAnswer(question) {
+    loader.style.display = 'block';
+    responseDiv.textContent = '';
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            {role: "system", content: "আপনি একজন সহায়ক শিক্ষার্থী সহকারী। প্রশ্নের সহজ ও পরিষ্কার উত্তর বাংলায় দিবেন।"},
+            {role: "user", content: question}
+          ],
+          temperature: 0.7,
+          max_tokens: 800
+        })
+      });
+      const data = await response.json();
+      loader.style.display = 'none';
+      if (data.error) {
+        responseDiv.textContent = "ত্রুটি: " + data.error.message;
+        return;
+      }
+      const answer = data.choices[0].message.content.trim();
+      responseDiv.textContent = answer;
+    } catch (error) {
+      loader.style.display = 'none';
+      responseDiv.textContent = "সার্ভারে সমস্যা, পরে চেষ্টা করুন।";
+    }
+  }
+
+  askBtn.addEventListener('click', async () => {
+    askBtn.disabled = true;
+    let question = questionInput.value.trim();
+    if (!question && imageInput.files.length === 0) {
+      alert("অনুগ্রহ করে প্রশ্ন লিখুন অথবা ছবি আপলোড করুন।");
+      askBtn.disabled = false;
+      return;
+    }
+    if (!question && imageInput.files.length > 0) {
+      // ছবি থেকে টেক্সট পড়ে প্রশ্নে সেট করা
+      question = await readImage(imageInput.files[0]);
+      if (!question) {
+        askBtn.disabled = false;
+        return;
+      }
+    }
+    await fetchAnswer(question);
+    askBtn.disabled = false;
+  });
+</script>
+
+</body>
+</html>
